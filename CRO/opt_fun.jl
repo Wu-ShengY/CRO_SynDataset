@@ -172,6 +172,78 @@ function AttackModel_BO(net, att)
     end
 end
 
+# load redistribution attack model in bilevel optimization settings allowing constraint violations
+function AttackModel_BO_feas(net,att)
+    model = Model(optimizer_with_attributes(Gurobi.Optimizer))
+    set_optimizer_attribute(model, "OutputFlag", 0)
+    # upper-level variables 
+    @variable(model, δ[1:net[:N]])
+    # primal lower-level variables
+    @variable(model, p[1:net[:N]])
+    @variable(model, v[1:net[:E]].>=0)
+    # dual variables
+    @variable(model, λ)
+    @variable(model, θ[1:net[:E]]>=0) # dual for v>=0
+    @variable(model, μ̅[1:net[:E]]>=0)
+    @variable(model, μ̲[1:net[:E]]>=0)
+    @variable(model, γ̅[1:net[:N]]>=0)
+    @variable(model, γ̲[1:net[:N]]>=0)
+    # upper-level objective function 
+    @objective(model, Max, net[:c1]'p+ att[:Ψ]*(ones(net[:E])'*v))
+    # attack vector constraints 
+    @constraint(model, δ.<=att[:δ̅])
+    @constraint(model, δ.>=att[:δ̲])
+    @constraint(model, ones(net[:N])'δ==0)
+    # KKT conditions of OPF
+    # primal constriants 
+    @constraint(model, ones(net[:N])'*(p .- net[:d].-δ) .== 0)
+    @constraint(model, - net[:F]*(p .- net[:d].-δ) .>= - net[:f̅] .-v)
+    @constraint(model, net[:f̅].+v .>= - net[:F]*(p .- net[:d].-δ))
+    @constraint(model, -p .>= -net[:p̅])
+    @constraint(model, -net[:p̲] .>= -p)
+
+    # stationary constraints
+    @constraint(model, net[:c1] + λ * ones(net[:N]) + net[:F]' * μ̅ - net[:F]' * μ̲ + γ̅ - γ̲ .== 0)
+    @constraint(model, att[:Ψ]*(ones(net[:E])) .- μ̅ .- μ̲ .- θ== 0)
+    # # strong duality 
+    # complementarity conditions formulated as SOS1 constraints
+    @variable(model,aux_μ̅[1:net[:E]].>=0)
+    @variable(model,aux_μ̲[1:net[:E]].>=0)
+    @variable(model,aux_γ̅[1:net[:E]].>=0)
+    @variable(model,aux_γ̲[1:net[:E]].>=0)
+    @variable(model,aux_θ[1:net[:E]].>=0)
+    for i in 1:net[:E]
+        @constraint(model, aux_μ̅[i] .== net[:f̅][i].+v[i] .- net[:F][i,:]'*(p .- net[:d].-δ))
+        @constraint(model, [μ̅[i] , aux_μ̅[i]] in SOS1())
+
+        @constraint(model, aux_μ̲[i] .== net[:F][i,:]'*(p .- net[:d].-δ) .+ net[:f̅][i].+v[i])
+        @constraint(model, [μ̲[i] , aux_μ̲[i]] in SOS1())
+        @constraint(model, aux_θ[i] .== v[i])
+        @constraint(model, [θ[i] , aux_θ[i]] in SOS1())
+    end
+    for i in 1:net[:N]
+        @constraint(model, aux_γ̅[i] .== net[:p̅][i] .- p[i])
+        @constraint(model, [γ̅[i], aux_γ̅[i]] in SOS1())
+
+        @constraint(model, aux_γ̲[i] .== p[i] .- net[:p̲][i])
+        @constraint(model, [γ̲[i] , aux_γ̲[i]] in SOS1())
+    end
+    # solve primal-dual model
+    optimize!(model)
+    @info("done solving the Attack_BO_feas problem: $(termination_status(model))")
+    status = "$(termination_status(model))"
+    if status == "OPTIMAL"
+        sol = Dict(:status => termination_status(model),
+        :obj => JuMP.objective_value(model),
+        :p => JuMP.value.(p),
+        :CPUtime => solve_time(model),
+        :δ => JuMP.value.(δ),
+        )
+    else
+        sol = Dict(:status => termination_status(model))
+    end
+end
+
 # load redistribution attack model in robust optimization settings 
 function AttackModel_RO(net, net_c, att)
     K = size(net_c[:A], 1)
@@ -497,15 +569,16 @@ function CRO_Demand(net,net_c,d̃_0,C̃)
 end
 
 # CRO post processing algorithm with a specific attack constraint set W_set
-function CRO_EM_Demand(net,net_c,d̃_0,C̃,W_set)
+function CRO_Exp_Demand(net,net_c,d̃_0,C̃,W_set)
     K = size(net_c[:A],1)
     model = Model(optimizer_with_attributes(Gurobi.Optimizer))
     set_optimizer_attribute(model, "OutputFlag", 1)
 
     # synthetic demand data
-    @variable(model, d̃[1:net[:N]])                                      # may not be necessery because DP asnwer can be negative 
+    @variable(model, d̃[1:net[:N]].>=0)                                      # may not be necessery because DP asnwer can be negative 
     # auxiliary relaxation variable on line capacity
     @variable(model, v[1:net[:E]].>=0)
+    @variable(model, v2[1:net[:E]].>=0)
     # OPF compact parameter matrix
     @variable(model, h[1:K])
     @constraint(model, h[1] == ones(net[:N])'*(M_d.*d̃))
@@ -519,10 +592,14 @@ function CRO_EM_Demand(net,net_c,d̃_0,C̃,W_set)
     @variable(model, r_c_attack)
     @variable(model, r_c_OPF)
     @constraint(model, [r_d ; M_d.*(d̃ .- d̃_0)] in MOI.NormOneCone(1 + length(d̃)))
-    @constraint(model, aux_con1, [r_c_attack ; C̃ .- net[:c1]'*p1 .- att[:Ψ]*(ones(net[:E])'*v)] in MOI.NormOneCone(2))
-    @constraint(model, aux_con2, [r_c_OPF ; C̃ .- net[:c1]'*p2] in MOI.NormOneCone(2))
+    if syn_set[:obj_type]==1
+        @constraint(model, aux_con1, [r_c_attack ; C̃ .- net[:c1]'*p1 .- att[:Ψ]*(ones(net[:E])'*v)] in MOI.NormOneCone(2))
+    else
+        @constraint(model, aux_con1, [r_c_attack ; net[:c1]'*p1 .+ att[:Ψ]*(ones(net[:E])'*v) .- net[:c1]'*p2- att[:Ψ]*(ones(net[:E])'*v2)] in MOI.NormOneCone(2))
+    end
+    @constraint(model, aux_con2, [r_c_OPF ; C̃ .- net[:c1]'*p2- att[:Ψ]*(ones(net[:E])'*v2)] in MOI.NormOneCone(2))
     # Cyber Resilient Synthetic Dataset Generation objective function 
-    @objective(model, Min, syn_set[:β]*r_c_attack + (1-syn_set[:β])*r_c_OPF + syn_set[:γ]*r_d)
+    @objective(model, Min, syn_set[:β]*r_c_attack + r_c_OPF + syn_set[:γ]*r_d)
 
     #-----------------------KKT Conditions of Bilevel Attack Model----------------------
     # primal variables 
@@ -583,28 +660,35 @@ function CRO_EM_Demand(net,net_c,d̃_0,C̃,W_set)
     @variable(model, μ̲2[1:net[:E]]>=0)
     @variable(model, γ̅2[1:net[:N]]>=0)
     @variable(model, γ̲2[1:net[:N]]>=0)
+    @variable(model, ν[1:net[:E]]>=0) # dual for v>=0
+
 
     # primal constriants 
     @constraint(model, ones(net[:N])'*(p2 .- M_d.*d̃) .== 0)
-    @constraint(model, - net[:F]*(p2 .- M_d.*d̃) .>= - net[:f̅])
-    @constraint(model, net[:f̅] .>= - net[:F]*(p2 .- M_d.*d̃))
+    @constraint(model, - net[:F]*(p2 .- M_d.*d̃) .>= - net[:f̅].-v2)
+    @constraint(model, net[:f̅].+v2 .>= - net[:F]*(p2 .- M_d.*d̃))
     @constraint(model, -p2 .>= -net[:p̅])
     @constraint(model, -net[:p̲] .>= -p2)
 
     # stationary constraints
     @constraint(model, net[:c1] + λ2 * ones(net[:N]) + net[:F]' * μ̅2 - net[:F]' * μ̲2 + γ̅2 - γ̲2 .== 0)
+    @constraint(model, att[:Ψ]*(ones(net[:E])) .- μ̅2 .- μ̲2 .- ν== 0)
     # # strong duality 
     # complementarity conditions formulated as SOS1 constraints
     @variable(model,aux_μ̅2[1:net[:E]].>=0)
     @variable(model,aux_μ̲2[1:net[:E]].>=0)
     @variable(model,aux_γ̅2[1:net[:E]].>=0)
     @variable(model,aux_γ̲2[1:net[:E]].>=0)
+    @variable(model,aux_ν[1:net[:E]].>=0)
     for i in 1:net[:E]
-        @constraint(model, aux_μ̅2[i] .== net[:f̅][i] .- net[:F][i,:]'*(p2 .- M_d.*d̃))
+        @constraint(model, aux_μ̅2[i] .== net[:f̅][i].+v2[i] .- net[:F][i,:]'*(p2 .- M_d.*d̃))
         @constraint(model, [μ̅2[i] , aux_μ̅2[i]] in SOS1())
 
-        @constraint(model, aux_μ̲2[i] .== net[:F][i,:]'*(p2 .- M_d.*d̃) .+ net[:f̅][i])
+        @constraint(model, aux_μ̲2[i] .== net[:F][i,:]'*(p2 .- M_d.*d̃) .+ net[:f̅][i].+v2[i])
         @constraint(model, [μ̲2[i] , aux_μ̲2[i]] in SOS1())
+
+        @constraint(model, aux_ν[i] .== v2[i])
+        @constraint(model, [ν[i] , aux_ν[i]] in SOS1())
     end
     for i in 1:net[:N]
         @constraint(model, aux_γ̅2[i] .== net[:p̅][i] .- p2[i])
@@ -618,7 +702,7 @@ function CRO_EM_Demand(net,net_c,d̃_0,C̃,W_set)
     optimize!(model)
     @info("done solving the Feasible CRData_Demand_Tradeoff problem: $(termination_status(model))")
     status = "$(termination_status(model))"
-    if status == "OPTIMAL"
+    if status == "OPTIMAL" || status == "LOCALLY_SOLVED"
         sol = Dict(:status => termination_status(model),
         :obj => JuMP.objective_value(model),
         :p1 => JuMP.value.(p1),
@@ -645,6 +729,7 @@ function Exponential_Mechanism(net,net_c,con_num=10)
     ΔC_max_list=[]
     net_test=deepcopy(net_c)
     net_test[:c]=vcat(ones(net[:N])'*net[:d] , -net[:F]*net[:d]-net[:f̅] , net[:F]*net[:d]-net[:f̅])
+    sol_opf_k=DC_OPF_compact_notation(net_c)
     while length(unattacked_set) != K-con_num
         # find the first worst case attack scenarios
         if length(unattacked_set)==K
@@ -679,13 +764,13 @@ end
 
 # case study of CRO Algorithms in distributions
 function Results_CRO(sample_points=10)
-    dict_pp=Dict(:C_OPF => zeros(sample_points), :C_att_RO => zeros(sample_points), :C_att_BO => zeros(sample_points), :d̃ => zeros(sample_points,net[:N]), :d̃0 => zeros(sample_points,net[:N]),:v => zeros(sample_points,net[:E]), :C̃ =>zeros(sample_points))
-    dict_tradeoff=Dict(:C_OPF => zeros(sample_points), :C_att_RO => zeros(sample_points), :C_att_BO => zeros(sample_points), :d̃ => zeros(sample_points,net[:N]),:d̃0 => zeros(sample_points,net[:N]),:v => zeros(sample_points,net[:E]), :C̃ =>zeros(sample_points))
-    Random.seed!(33)
+    dict_pp=Dict(:C_OPF => zeros(sample_points), :C_att_RO => zeros(sample_points), :C_att_RO_τ1 => zeros(sample_points),:C_att_RO_τ5 => zeros(sample_points),:C_att_BO => zeros(sample_points), :d̃ => zeros(sample_points,net[:N]), :d̃0 => zeros(sample_points,net[:N]),:v => zeros(sample_points,net[:E]), :C̃ =>zeros(sample_points))
+    dict_tradeoff=Dict(:C_OPF => zeros(sample_points), :C_att_RO => zeros(sample_points), :C_att_RO_τ1 => zeros(sample_points),:C_att_RO_τ5 => zeros(sample_points),:C_att_BO => zeros(sample_points), :d̃ => zeros(sample_points,net[:N]),:d̃0 => zeros(sample_points,net[:N]),:v => zeros(sample_points,net[:E]), :C̃ =>zeros(sample_points))
+    Random.seed!(28)
     net_test=deepcopy(net)
     net_test[:A]=net_c[:A]
     net_test[:B]=net_c[:B]
-    for i in 1:sample_points
+    @showprogress for i in 1:sample_points
     # for i in 1:sample_points
         d̃_i= M_d.*(net[:d] .+ rand(Laplace(0,syn_set[:α]/(syn_set[:ϵ]/2)),net[:N]))
         C̃_i=sol_opf[:obj] .+ rand(Laplace(0,(syn_set[:c_max]*syn_set[:α])/(syn_set[:ϵ]/2)))
@@ -707,10 +792,15 @@ function Results_CRO(sample_points=10)
         sol_att_pp_i=AttackModel_RO(net,net_test,att)
         dict_pp[:C_att_RO][i]=sol_att_pp_i[:obj]
         net_test[:d]=sol_pp_i[:d̃]
-        dict_pp[:C_att_BO][i]=AttackModel_BO(net_test,att)[:obj]
+        dict_pp[:C_att_BO][i]=AttackModel_BO_feas(net_test,att)[:obj]
 
-        # Record the synthetic demand data using CRO postporocessing model
-        sol_tradeoff_i=CRO_Demand(net,net_c,d̃_i,C̃_i)
+        # att damage of τ-constraint attacks 
+        # attack_list_τ=Exponential_Mechanism(net,net_c,5)
+        # dict_pp[:C_att_RO_τ1][i]=AttackModel_feas_k(net, net_test,att,attack_list_τ[1])[:obj]
+        # dict_pp[:C_att_RO_τ5][i]=AttackModel_feas_k(net, net_test,att,attack_list_τ)[:obj]
+
+        # Record the synthetic demand data using tradeoff postporocessing model
+        sol_tradeoff_i=CRData_Demand_tradeoff_feas(net,net_c,d̃_i,C̃_i)
         dict_tradeoff[:d̃][i,:]=sol_tradeoff_i[:d̃]
         # Record the OPF objectives on the generated synthetic datasets
         net_test[:c]=vcat(ones(net[:N])'*sol_tradeoff_i[:d̃] , -net[:F]*sol_tradeoff_i[:d̃]-net[:f̅] , net[:F]*sol_tradeoff_i[:d̃]-net[:f̅])
@@ -720,27 +810,53 @@ function Results_CRO(sample_points=10)
         dict_tradeoff[:d̃0][i,:]=d̃_i
         dict_tradeoff[:C̃][i]=C̃_i
         # record the attack objectives on the generated synthetic datasets
-        dict_tradeoff[:C_att_RO][i]=AttackModel_RO(net,net_test,att)[:obj]
+        dict_tradeoff[:C_att_RO][i]=AttackModel_feas(net,net_test,att)[:obj]
         net_test[:d]=sol_tradeoff_i[:d̃]
-        dict_tradeoff[:C_att_BO][i]=AttackModel_BO(net_test,att)[:obj]
+        dict_tradeoff[:C_att_BO][i]=AttackModel_BO_feas(net_test,att)[:obj]
+
+        # dict_tradeoff[:C_att_RO_τ1][i]=AttackModel_feas_k(net, net_test,att,attack_list_τ[1])[:obj]
+        # dict_tradeoff[:C_att_RO_τ5][i]=AttackModel_feas_k(net, net_test,att,attack_list_τ)[:obj]
     end
     return dict_pp, dict_tradeoff
 end
 
+# serialize the results of CRO and save it results_CRO folder
+function CaseStudy_CRO(sample_num=10)
+    syn_set[:α]= 50
+    dict_pp_50 , dict_cro_50 = Results_CRO(sample_num)
+    @show [mean(dict_cro_50[:C_OPF]) std(dict_cro_50[:C_OPF]) mean(dict_cro_50[:C_att_BO]) std(dict_cro_50[:C_att_BO]) mean(dict_pp_50[:C_OPF]) std(dict_pp_50[:C_OPF]) mean(dict_pp_50[:C_att_BO]) std(dict_pp_50[:C_att_BO])]
+    # save the results to file
+    serialize("./results_CRO_feas/dict_pp_50.jls", dict_pp_50)
+    serialize("./results_CRO_feas/dict_cro_50.jls", dict_cro_50)
+
+    syn_set[:α]= 100
+    dict_pp_100 , dict_cro_100 = Results_CRO(sample_num)
+    @show [mean(dict_cro_100[:C_OPF]) std(dict_cro_100[:C_OPF]) mean(dict_cro_100[:C_att_BO]) std(dict_cro_100[:C_att_BO]) mean(dict_pp_100[:C_OPF]) std(dict_pp_100[:C_OPF]) mean(dict_pp_100[:C_att_BO]) std(dict_pp_100[:C_att_BO])]
+    # save the results to file
+    serialize("./results_CRO_feas/dict_pp_100.jls", dict_pp_100)
+    serialize("./results_CRO_feas/dict_cro_100.jls", dict_cro_100)
+
+    syn_set[:α]= 20
+    dict_pp_20 , dict_cro_20 = Results_CRO(sample_num)
+    @show [mean(dict_cro_20[:C_OPF]) std(dict_cro_20[:C_OPF]) mean(dict_cro_20[:C_att_BO]) std(dict_cro_20[:C_att_BO]) mean(dict_pp_20[:C_OPF]) std(dict_pp_20[:C_OPF]) mean(dict_pp_20[:C_att_BO]) std(dict_pp_20[:C_att_BO])]
+    # save the results to file
+    serialize("./results_CRO_feas/dict_pp_20.jls", dict_pp_20)
+    serialize("./results_CRO_feas/dict_cro_20.jls", dict_cro_20)
+end
+
 # figures of CRO algorithms
-function plot_CRO()
+function plot_CRO_test(sample_num=50)
     # draw a distribution of opf objectives before and after attack 
 
     # Create a figure
     fig = Figure(size=(1000, 800))
-    bin_num=25
-    sample_num=500
+    bin_num=20
     transparency=0.4
     # Create subfigures
-    ax1 = Axis(fig[1, 1], title="PP Dataset (α=50)", xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 105000), nothing),yticksvisible = false,yticklabelsvisible = false,xticksvisible = false,xticklabelsvisible = false, titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
-    ax2 = Axis(fig[2, 1], title="CRO Dataset (α=50)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 105000), nothing),yticksvisible = false,yticklabelsvisible = false,xlabel="Cost(k\$)",ylabel="Frequency",titlesize=24,ylabelsize=24,xlabelsize=24, xticklabelsize=20)
-    ax3 = Axis(fig[1, 2], title="PP Dataset (α=200)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 105000), nothing),yticksvisible = false,yticklabelsvisible = false, xticksvisible = false,xticklabelsvisible = false,titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
-    ax4 = Axis(fig[2, 2], title="CRO Dataset (α=200)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 105000), nothing),yticksvisible = false,yticklabelsvisible = false, xticksvisible = false,xticklabelsvisible = false,titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
+    ax1 = Axis(fig[1, 1], title="PP Dataset (α=50)", xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false,xticksvisible = false,xticklabelsvisible = false, titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
+    ax2 = Axis(fig[2, 1], title="CRO Dataset (α=50)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false,xlabel="Cost(k\$)",ylabel="Frequency",titlesize=24,ylabelsize=24,xlabelsize=24, xticklabelsize=20)
+    ax3 = Axis(fig[1, 2], title="PP Dataset (α=200)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false, xticksvisible = false,xticklabelsvisible = false,titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
+    ax4 = Axis(fig[2, 2], title="CRO Dataset (α=200)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false, xticksvisible = false,xticklabelsvisible = false,titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
 
     syn_set[:α]= 50
     dict_pp , dict_tradeoff = Results_CRO(sample_num)
@@ -776,6 +892,77 @@ function plot_CRO()
     # Show the figure
     display(fig)
     # save("CRO_alpha.png",fig)
+end
+
+# deserialize the results of CRO for plotting
+function Plot_CRO()
+    bin_num=35
+    transparency=0.4
+
+    # read the file 
+
+    dict_pp_50 = deserialize("./results_CRO/dict_pp_50.jls")
+    dict_cro_50 = deserialize("./results_CRO/dict_cro_50.jls")
+    dict_pp_100 = deserialize("./results_CRO/dict_pp_100.jls")
+    dict_cro_100 = deserialize("./results_CRO/dict_cro_100.jls")
+    dict_pp_20 = deserialize("./results_CRO/dict_pp_20.jls")
+    dict_cro_20 = deserialize("./results_CRO/dict_cro_20.jls")
+
+    # Create a figure
+    fig = Figure(size=(1080, 750))
+
+
+    ax1 = Axis(fig[1, 1], title="Adjacency α=20MW", xticks=xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false,xticksvisible = false,xticklabelsvisible = false,ylabel="Frequency",titlesize=29, ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    # Plot subfugure (1,1)
+    hist!(ax1, dict_pp_20[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}(\tilde{\textbf{d}}_\text{pp})")
+    hist!(ax1, dict_pp_20[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{pp})")
+    vlines!(ax1, mean(dict_pp_20[:C_OPF]), linestyle=:dot, linewidth=2, color="#003049")
+    vlines!(ax1, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax1, mean(dict_pp_20[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+
+    ax2 = Axis(fig[2, 1],xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false,xlabel="Dispatch Cost(k\$)",ylabel="Frequency",titlesize=29,ylabelsize=24,xlabelsize=24, xticklabelsize=20, aspect=1)
+    hist!(ax2, dict_cro_20[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}(\tilde{\textbf{d}}_\text{cro})")
+    hist!(ax2, dict_cro_20[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{cro})")
+    vlines!(ax2, mean(dict_cro_20[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax2, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax2, mean(dict_cro_20[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+    ax3 = Axis(fig[1, 2], title="Adjacency α=50MW",xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)), xticksvisible = false,xticklabelsvisible = false,yticksvisible = false,yticklabelsvisible = false,titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    hist!(ax3, dict_pp_50[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}(\tilde{\textbf{d}}_\text{pp})")
+    hist!(ax3, dict_pp_50[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{pp})")
+    vlines!(ax3, mean(dict_pp_50[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax3, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax3, mean(dict_pp_50[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+
+    ax4 = Axis(fig[2, 2],xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false, xlabel="Dispatch Cost(k\$)", titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    hist!(ax4, dict_cro_50[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{cro})")
+    hist!(ax4, dict_cro_50[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{cro})")
+    vlines!(ax4, mean(dict_cro_50[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax4, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax4, mean(dict_cro_50[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+    ax5 = Axis(fig[1, 3], title="Adjacency α=100MW",xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)), xticksvisible = false,xticklabelsvisible = false,titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20,yticksvisible = false,yticklabelsvisible = false, aspect=1)
+    hist!(ax5, dict_pp_100[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency))
+    hist!(ax5, dict_pp_100[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency))
+    vlines!(ax5, mean(dict_pp_100[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax5, [88200], linestyle=:dot, linewidth=3, color="#fca311")
+    vlines!(ax5, mean(dict_pp_100[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+    
+
+    ax6 = Axis(fig[2, 3],xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false, xlabel="Dispatch Cost(k\$)", titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    hist!(ax6, dict_cro_100[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency))
+    hist!(ax6, dict_cro_100[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency))
+    vlines!(ax6, mean(dict_cro_100[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax6, [88200], linestyle=:dot, linewidth=3, color="#fca311")
+    vlines!(ax6, mean(dict_cro_100[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+    
+    axislegend(ax3,labelsize=25,position=:lt)
+    axislegend(ax4,labelsize=25,position=:lt)
+    # Show the figure
+    display(fig)
+    save("CRO_alpha.png",fig)
 end
 
 # case study of CRO-Exp algorithm, return the attack damage in absolute values
@@ -824,12 +1011,9 @@ function CaseStudy_CRO_EM(net,net_c,sample_points=100)
 end
 
 # case study of CRO-Exp algorithm, return the attack damage in percentages.
-function Results_CRO_EM(syn_set)
-    # dict_cro=Distribution_CR_EM_att(net,net_c,50)
-    # @show [mean(dict_cro[:C_OPF]) quantile(dict_cro[:C_OPF], 0.90) quantile(dict_cro[:C_OPF], 0.1) mean(dict_cro[:C_att_RO]) quantile(dict_cro[:C_att_RO], 0.9) quantile(dict_cro[:C_att_RO], 0.1) mean(dict_cro[:C_att_BO]) quantile(dict_cro[:C_att_BO], 0.90) quantile(dict_cro[:C_att_BO], 0.1)]
-    # println("τ=",att[:τ])
+function Results_CRO_EM(sample_points=100)
     Random.seed!(8)
-    dict_cro_τ=CaseStudy_CRO_EM(net,net_c,syn_set[:s])
+    dict_cro_τ=CaseStudy_CRO_EM(net,net_c,sample_points)
     BO_mean_list=[]
     BO_95_list=[]
     BO_05_list=[]
