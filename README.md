@@ -2,7 +2,7 @@
 
 ## Installation and usage
 
-All models are implemented in Julia Language v.1.10.5 using [JuMP](https://github.com/jump-dev/JuMP.jl) modeling language for mathematical optimization and commercial [Mosek](https://github.com/MOSEK/Mosek.jl) or [Gurobi](https://github.com/jump-dev/Gurobi.jl) optimization solvers, which need to be licensed (free for academic use). 
+All models are implemented in Julia Language v.1.10.5 using [JuMP](https://github.com/jump-dev/JuMP.jl) modeling language for mathematical optimization and commercial [Gurobi](https://github.com/jump-dev/Gurobi.jl) optimization solvers (11.0.3), which need to be licensed (free for academic use). 
 
 The codes to implement CRO and CRO_Exp algorithms are placed in ```CRO_main.jl``` and ```CRO_EM_main.jl``` files, respectively. Make sure to active project environment using ```Project.toml``` and ```Manifest.toml``` located in the folder. 
 
@@ -40,8 +40,6 @@ julia >
 ```
 
 Run the scripts by typing in ```include("CRO_main.jl")``` and ```include("CRO_EM_main.jl")``` to run the two algorithms, respectively.
-
-
 
 ### Server environment running (Server Only)
 
