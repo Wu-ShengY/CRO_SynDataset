@@ -580,11 +580,7 @@ function CRO_Exp_Demand(net,net_c,d̃_0,C̃,W_set)
     @variable(model, r_c_attack)
     @variable(model, r_c_OPF)
     @constraint(model, [r_d ; M_d.*(d̃ .- d̃_0)] in MOI.NormOneCone(1 + length(d̃)))
-    if syn_set[:obj_type]==1
-        @constraint(model, aux_con1, [r_c_attack ; C̃ .- net[:c1]'*p1 .- att[:Ψ]*(ones(net[:E])'*v)] in MOI.NormOneCone(2))
-    else
-        @constraint(model, aux_con1, [r_c_attack ; net[:c1]'*p1 .+ att[:Ψ]*(ones(net[:E])'*v) .- net[:c1]'*p2- att[:Ψ]*(ones(net[:E])'*v2)] in MOI.NormOneCone(2))
-    end
+    @constraint(model, aux_con1, [r_c_attack ; C̃ .- net[:c1]'*p1 .- att[:Ψ]*(ones(net[:E])'*v)] in MOI.NormOneCone(2))
     @constraint(model, aux_con2, [r_c_OPF ; C̃ .- net[:c1]'*p2- att[:Ψ]*(ones(net[:E])'*v2)] in MOI.NormOneCone(2))
     # Cyber Resilient Synthetic Dataset Generation objective function 
     @objective(model, Min, syn_set[:β]*r_c_attack + r_c_OPF + syn_set[:γ]*r_d)
@@ -1003,7 +999,7 @@ function CaseStudy_CRO_EM(net,net_c,sample_points=100)
                 dict_cr[:C_att_BO][τ_idx+1,i]=sol_pp_att_BO[:obj]
             else
                 att_list_τ=attacked_list_total[1:τ_idx]
-                sol_cr_i=CRO_EM_Demand(net,net_c,d̃_i,C̃_i,att_list_τ)
+                sol_cr_i=CRO_Exp_Demand(net,net_c,d̃_i,C̃_i,att_list_τ)
                 # record the Attack objectives on the generated synthetic datasets
                 net_c_test[:c]=vcat(ones(net[:N])'*sol_cr_i[:d̃] , -net[:F]*sol_cr_i[:d̃]-net[:f̅] , net[:F]*sol_cr_i[:d̃]-net[:f̅])
                 # Record the OPF objectives on the generated synthetic datasets
