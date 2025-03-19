@@ -12,10 +12,10 @@ To run the CRO algorithm on the PJM 5-bus system, type the following command in 
 
 which asks to compute the results for adjacency parameter 50.0 and privacy loss 1.0. 
 
-Similarly, to run the CRO algorithm on the PJM 5-bus system, type:
+Similarly, to run the CRO algorithm on the IEEE 14-bus system, type:
 
-```julia CRO_EM_main.jl -a 50.0 -e 1.0 -t 10```
+```julia CRO_EM_main.jl -a 2.0 -e 1.0 -t 5```
 
-which asks to compute the results from τ=1 to τ=10 , with the same privacy parameter as above. 
+which asks to compute the results from τ=1 to τ=5 , with the same privacy parameter as above. 
 
 ---
