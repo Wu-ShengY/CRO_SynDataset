@@ -75,7 +75,7 @@ include("opt_fun.jl")
 
 # To get numerical results of normal and post-attack OPF cost in PJM 5-bus systems
 dict_pp, dict_cro=Results_CRO(net,net_c,syn_set[:s])
-@show [mean(dict_pp[:C_OPF]) mean(dict_pp[:C_att_BO]) mean(dict_pp[:C_att_RO]) mean(dict_cro[:C_OPF]) mean(dict_cro[:C_att_BO])  mean(dict_cro[:C_att_RO]) ]
+@show [mean(dict_pp[:C_OPF]) mean(dict_pp[:C_att_BO]) mean(dict_cro[:C_OPF]) mean(dict_cro[:C_att_BO])]
 
 # Get results and serialize them
 # CaseStudy_CRO(net,net_c,syn_set[:s])
