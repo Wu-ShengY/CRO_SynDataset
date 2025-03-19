@@ -15,10 +15,11 @@ First go into the CRO folder in the terminal
 
 activate the julia environment by typing in ```julia```
 
-Use the following command to setup the environments, then run the ```CRO_main.jl``` and ```CRO_EM_main.jl``` files with default arguments
+Type ```]``` to enter the package installing environment
+
+Use the following command to setup the environments
 
 ```
-]
 activate .
 instantiate
 add PowerModels Statistics LinearAlgebra Distributions Random JuMP Gurobi DataFrames CSV Tables Plots LaTeXStrings CairoMakie StatsPlots ProgressMeter ArgParse Distributed Serialization
@@ -38,7 +39,7 @@ Run the scripts by typing in ```include("CRO_main.jl")``` and ```include("CRO_EM
 
 
 
-### Server environment running
+### Server environment running (Optional)
 
 First make sure that the julia environment is properly installed on the server (see the Virtual environment setup section above)
 
