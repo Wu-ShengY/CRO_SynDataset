@@ -29,7 +29,7 @@ If there are some package conflicts, use ```Pkg.resolve()``` to resolve the conf
 
 ### Local environment running
 
-After finishing the Virtual environment setup and ensuring that all packages are installed, type backspace to return to the julia environment.
+After finishing the Virtual environment setup and ensuring that all packages are installed, type backspace (delete in mac) to return to the julia environment, which looks like.
 
 ```
 julia >
@@ -39,7 +39,7 @@ Run the scripts by typing in ```include("CRO_main.jl")``` and ```include("CRO_EM
 
 
 
-### Server environment running (Optional)
+### Server environment running (Server Only)
 
 First make sure that the julia environment is properly installed on the server (see the Virtual environment setup section above)
 
