@@ -32,6 +32,6 @@ Similarly, to run the CRO_Exp algorithm on the IEEE 14-bus system, type:
 
 ```julia CRO_EM_main.jl -a 2.0 -e 1.0 -t 5```
 
-which asks to compute the results from ```τ=1``` to ```τ=5``` , with adjacency 2.0MW and privacy loss 1.0. 
+which asks to compute the results from ```τ=1``` to ```τ=5``` , with adjacency parameter 2.0MW and privacy loss 1.0. 
 
 ---
