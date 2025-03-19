@@ -7,22 +7,36 @@ All models are implemented in Julia Language v.1.10.5 using [JuMP](https://githu
 The codes to implement CRO and CRO_Exp algorithms are placed in ```CRO_main.jl``` and ```CRO_EM_main.jl``` files, respectively. Make sure to active project environment using ```Project.toml``` and ```Manifest.toml``` located in the folder. 
 
 
-### REPL environment
+### Virtual environment setup
+
+First go into the CRO folder in the terminal
+
+```cd your_file_path/CRO```
+
+activate the julia environment by typing in ```julia```
 
 Use the following command to setup the environments, then run the ```CRO_main.jl``` and ```CRO_EM_main.jl``` files with default arguments
 
 ```
 ]
-(CRO) pkg> activate .
-(CRO) pkg> add Pkg
-(CRO) pkg> instantiate
+activate .
+instantiate
+add PowerModels Statistics LinearAlgebra Distributions Random JuMP Gurobi DataFrames CSV Tables Plots LaTeXStrings StatsPlots ProgressMeter ArgParse Distributed Serialization
 ```
 
-First change the directory to the CRO folder:
+If there are some package conflicts, use ```Pkg.resolve()``` to resolve the conflicts
 
-```cd your_file_path/CRO```
+### REPL environment running
 
-### Terminal usage
+After ensuring that all packages are installed, type backspace to return to the julia environment
+
+Run the scripts using ```include("CRO_main.jl")``` and ```include("CRO_EM_main.jl")```
+
+### Terminal running
+
+After environment setup, exit the REPL environment using
+
+```exit()```
 
 To run the CRO algorithm on the PJM 5-bus system, type the following command in the terminal:
 
