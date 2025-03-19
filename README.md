@@ -26,17 +26,28 @@ add PowerModels Statistics LinearAlgebra Distributions Random JuMP Gurobi DataFr
 
 If there are some package conflicts, use ```Pkg.resolve()``` to resolve the conflicts
 
-### REPL environment running
+### Local environment running
 
-After ensuring that all packages are installed, type backspace to return to the julia environment
+After finishing the Virtual environment setup and ensuring that all packages are installed, type backspace to return to the julia environment.
 
-Run the scripts using ```include("CRO_main.jl")``` and ```include("CRO_EM_main.jl")```
+```
+julia >
+```
 
-### Terminal running
+Run the scripts by typing in ```include("CRO_main.jl")``` and ```include("CRO_EM_main.jl")``` to run the two algorithms, respectively.
 
-After environment setup, exit the REPL environment using
 
-```exit()```
+
+### Server environment running
+
+First make sure that the julia environment is properly installed on the server (see the Virtual environment setup section above)
+
+Load the Julia environment
+
+```
+module load julia/1.10.2
+module load gurobi/10.0.2
+```
 
 To run the CRO algorithm on the PJM 5-bus system, type the following command in the terminal:
 
