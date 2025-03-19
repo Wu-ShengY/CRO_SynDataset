@@ -17,7 +17,11 @@ activate the julia environment by typing in ```julia```
 
 Type ```]``` to enter the package installing environment
 
-Use the following command to setup the environments
+```
+(CRO)pkg > 
+```
+
+Type in the following command to add packages
 
 ```
 activate .
