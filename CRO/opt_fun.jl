@@ -1,15 +1,3 @@
-using PowerModels
-using Statistics, LinearAlgebra, Distributions, Random
-using JuMP, Gurobi, MosekTools, Mosek
-using DataFrames, CSV, Tables, Plots
-using LaTeXStrings
-using CairoMakie, StatsPlots
-using ProgressMeter, ArgParse
-using Random
-using Base.Threads
-using Dates
-using Distributed
-
 # standard DC-OPF
 function OPF(net, d)
     # original DC-OPF problem
@@ -763,15 +751,18 @@ function Exponential_Mechanism(net,net_c,con_num=10)
 end
 
 # case study of CRO Algorithms in distributions
-function Results_CRO(sample_points=10)
+function Results_CRO(net,net_c,sample_points=10)
+    # calculate the standard OPF cost
+    sol_opf=DC_OPF_compact_feas(net_c)
+    # println("Standard OPF Objectives: ",sol_opf[:obj]) 
     dict_pp=Dict(:C_OPF => zeros(sample_points), :C_att_RO => zeros(sample_points), :C_att_RO_τ1 => zeros(sample_points),:C_att_RO_τ5 => zeros(sample_points),:C_att_BO => zeros(sample_points), :d̃ => zeros(sample_points,net[:N]), :d̃0 => zeros(sample_points,net[:N]),:v => zeros(sample_points,net[:E]), :C̃ =>zeros(sample_points))
     dict_tradeoff=Dict(:C_OPF => zeros(sample_points), :C_att_RO => zeros(sample_points), :C_att_RO_τ1 => zeros(sample_points),:C_att_RO_τ5 => zeros(sample_points),:C_att_BO => zeros(sample_points), :d̃ => zeros(sample_points,net[:N]),:d̃0 => zeros(sample_points,net[:N]),:v => zeros(sample_points,net[:E]), :C̃ =>zeros(sample_points))
-    Random.seed!(28)
+    Random.seed!(30)
     net_test=deepcopy(net)
     net_test[:A]=net_c[:A]
     net_test[:B]=net_c[:B]
-    @showprogress for i in 1:sample_points
-    # for i in 1:sample_points
+    # @showprogress for i in 1:sample_points
+    for i in 1:sample_points
         d̃_i= M_d.*(net[:d] .+ rand(Laplace(0,syn_set[:α]/(syn_set[:ϵ]/2)),net[:N]))
         C̃_i=sol_opf[:obj] .+ rand(Laplace(0,(syn_set[:c_max]*syn_set[:α])/(syn_set[:ϵ]/2)))
         println("synthetic cost:", C̃_i)
@@ -800,7 +791,7 @@ function Results_CRO(sample_points=10)
         # dict_pp[:C_att_RO_τ5][i]=AttackModel_feas_k(net, net_test,att,attack_list_τ)[:obj]
 
         # Record the synthetic demand data using tradeoff postporocessing model
-        sol_tradeoff_i=CRData_Demand_tradeoff_feas(net,net_c,d̃_i,C̃_i)
+        sol_tradeoff_i=CRO_Demand(net,net_c,d̃_i,C̃_i)
         dict_tradeoff[:d̃][i,:]=sol_tradeoff_i[:d̃]
         # Record the OPF objectives on the generated synthetic datasets
         net_test[:c]=vcat(ones(net[:N])'*sol_tradeoff_i[:d̃] , -net[:F]*sol_tradeoff_i[:d̃]-net[:f̅] , net[:F]*sol_tradeoff_i[:d̃]-net[:f̅])
@@ -810,7 +801,7 @@ function Results_CRO(sample_points=10)
         dict_tradeoff[:d̃0][i,:]=d̃_i
         dict_tradeoff[:C̃][i]=C̃_i
         # record the attack objectives on the generated synthetic datasets
-        dict_tradeoff[:C_att_RO][i]=AttackModel_feas(net,net_test,att)[:obj]
+        dict_tradeoff[:C_att_RO][i]=AttackModel_RO(net,net_test,att)[:obj]
         net_test[:d]=sol_tradeoff_i[:d̃]
         dict_tradeoff[:C_att_BO][i]=AttackModel_BO_feas(net_test,att)[:obj]
 
@@ -845,50 +836,68 @@ function CaseStudy_CRO(sample_num=10)
 end
 
 # figures of CRO algorithms
-function plot_CRO_test(sample_num=50)
+function plot_CRO_test(net,net_c,sample_num=50)
     # draw a distribution of opf objectives before and after attack 
-
     # Create a figure
-    fig = Figure(size=(1000, 800))
-    bin_num=20
+    syn_set[:α]=20
+    dict_pp_20,dict_cro_20=Results_CRO(net,net_c,sample_num)
+    syn_set[:α]=50
+    dict_pp_50,dict_cro_50=Results_CRO(net,net_c,sample_num)
+    syn_set[:α]=100
+    dict_pp_100,dict_cro_100=Results_CRO(net,net_c,sample_num)
+
+    fig = Figure(size=(1080, 750))
     transparency=0.4
-    # Create subfigures
-    ax1 = Axis(fig[1, 1], title="PP Dataset (α=50)", xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false,xticksvisible = false,xticklabelsvisible = false, titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
-    ax2 = Axis(fig[2, 1], title="CRO Dataset (α=50)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false,xlabel="Cost(k\$)",ylabel="Frequency",titlesize=24,ylabelsize=24,xlabelsize=24, xticklabelsize=20)
-    ax3 = Axis(fig[1, 2], title="PP Dataset (α=200)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false, xticksvisible = false,xticklabelsvisible = false,titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
-    ax4 = Axis(fig[2, 2], title="CRO Dataset (α=200)",xticks=([20000,40000,60000,80000,100000],["20","40","60","80","100"]),limits=((10000, 110000), nothing),yticksvisible = false,yticklabelsvisible = false, xticksvisible = false,xticklabelsvisible = false,titlesize=24,ylabelsize=24,xlabelsize=24,xticklabelsize=20)
+    bin_num=10
 
-    syn_set[:α]= 50
-    dict_pp , dict_tradeoff = Results_CRO(sample_num)
-    @show [mean(dict_tradeoff[:C_OPF]) std(dict_tradeoff[:C_OPF]) mean(dict_tradeoff[:C_att_BO]) std(dict_tradeoff[:C_att_BO]) mean(dict_pp[:C_OPF]) std(dict_pp[:C_OPF]) mean(dict_pp[:C_att_BO]) std(dict_pp[:C_att_BO])]
+    ax1 = Axis(fig[1, 1], title="Adjacency α=20MW", xticks=xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false,xticksvisible = false,xticklabelsvisible = false,ylabel="Frequency",titlesize=29, ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
     # Plot subfugure (1,1)
-    hist!(ax1, dict_pp[:C̃], bins=bin_num, normalization=:pdf, color=(:green,transparency-0.2), label=L"\tilde{C}_\text{opf}")
-    hist!(ax1, dict_pp[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}")
-    hist!(ax1, dict_pp[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}")
-    
-    # Plot subfugure (2,1)
-    hist!(ax2, dict_pp[:C̃], bins=bin_num, normalization=:pdf, color=(:green,transparency-0.2), label=L"\tilde{C}_\text{opf}")
-    hist!(ax2, dict_tradeoff[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}")
-    hist!(ax2, dict_tradeoff[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}")
+    hist!(ax1, dict_pp_20[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}(\tilde{\textbf{d}}_\text{pp})")
+    hist!(ax1, dict_pp_20[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{pp})")
+    vlines!(ax1, mean(dict_pp_20[:C_OPF]), linestyle=:dot, linewidth=2, color="#003049")
+    vlines!(ax1, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax1, mean(dict_pp_20[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+
+    ax2 = Axis(fig[2, 1],xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false,xlabel="Dispatch Cost(k\$)",ylabel="Frequency",titlesize=29,ylabelsize=24,xlabelsize=24, xticklabelsize=20, aspect=1)
+    hist!(ax2, dict_cro_20[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}(\tilde{\textbf{d}}_\text{cro})")
+    hist!(ax2, dict_cro_20[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{cro})")
+    vlines!(ax2, mean(dict_cro_20[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax2, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax2, mean(dict_cro_20[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+    ax3 = Axis(fig[1, 2], title="Adjacency α=50MW",xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)), xticksvisible = false,xticklabelsvisible = false,yticksvisible = false,yticklabelsvisible = false,titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    hist!(ax3, dict_pp_50[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}(\tilde{\textbf{d}}_\text{pp})")
+    hist!(ax3, dict_pp_50[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{pp})")
+    vlines!(ax3, mean(dict_pp_50[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax3, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax3, mean(dict_pp_50[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+
+    ax4 = Axis(fig[2, 2],xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false, xlabel="Dispatch Cost(k\$)", titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    hist!(ax4, dict_cro_50[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{cro})")
+    hist!(ax4, dict_cro_50[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}(\tilde{\textbf{d}}_\text{cro})")
+    vlines!(ax4, mean(dict_cro_50[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax4, [88200], linestyle=:dot, linewidth=3, color="#fca311",label=L"C_\text{opf}(\textbf{d})")
+    vlines!(ax4, mean(dict_cro_50[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
+
+    ax5 = Axis(fig[1, 3], title="Adjacency α=100MW",xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)), xticksvisible = false,xticklabelsvisible = false,titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20,yticksvisible = false,yticklabelsvisible = false, aspect=1)
+    hist!(ax5, dict_pp_100[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency))
+    hist!(ax5, dict_pp_100[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency))
+    vlines!(ax5, mean(dict_pp_100[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax5, [88200], linestyle=:dot, linewidth=3, color="#fca311")
+    vlines!(ax5, mean(dict_pp_100[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
     
 
-    syn_set[:α]= 200
-    dict_pp , dict_tradeoff = Results_CRO(sample_num)
-    @show [mean(dict_tradeoff[:C_OPF]) std(dict_tradeoff[:C_OPF]) mean(dict_tradeoff[:C_att_BO]) std(dict_tradeoff[:C_att_BO]) mean(dict_pp[:C_OPF]) std(dict_pp[:C_OPF]) mean(dict_pp[:C_att_BO]) std(dict_pp[:C_att_BO])]
-    # Plot subfugure (1,2)
-    hist!(ax3, dict_pp[:C̃], bins=bin_num, normalization=:pdf, color=(:green,transparency-0.2), label=L"\tilde{C}_\text{opf}")
-    hist!(ax3, dict_pp[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}")
-    hist!(ax3, dict_pp[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}")
+    ax6 = Axis(fig[2, 3],xticks=([75000,80000,85000,90000,95000,100000,105000],["75","80","85","90","95","100","105"]),limits=((70000, 108000),(0,0.00030)),yticksvisible = false,yticklabelsvisible = false, xlabel="Dispatch Cost(k\$)", titlesize=29,ylabelsize=24,xlabelsize=24,xticklabelsize=20, aspect=1)
+    hist!(ax6, dict_cro_100[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency))
+    hist!(ax6, dict_cro_100[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency))
+    vlines!(ax6, mean(dict_cro_100[:C_OPF]), linestyle=:dot, linewidth=3, color="#003049")
+    vlines!(ax6, [88200], linestyle=:dot, linewidth=3, color="#fca311")
+    vlines!(ax6, mean(dict_cro_100[:C_att_BO]), linestyle=:dot, linewidth=3, color="#780000")
     
-    # Plot subfugure (2,2)
-    hist!(ax4, dict_pp[:C̃], bins=bin_num, normalization=:pdf, color=(:green,transparency-0.2), label=L"\tilde{C}_\text{opf}")
-    hist!(ax4, dict_tradeoff[:C_OPF], bins=bin_num, normalization=:pdf, color=("#003049",transparency), label=L"C_\text{opf}")
-    hist!(ax4, dict_tradeoff[:C_att_BO], bins=bin_num, normalization=:pdf, color=("#780000",transparency), label=L"C_\text{att}^{\text{BO}}")
-    
-    axislegend(ax1,labelsize=24,position=:lt)
-    axislegend(ax2,labelsize=24,position=:lt)
-    axislegend(ax3,labelsize=24,position=:lt)
-    axislegend(ax4,labelsize=24,position=:lt)
+    axislegend(ax3,labelsize=25,position=:lt)
+    axislegend(ax4,labelsize=25,position=:lt)
     # Show the figure
     display(fig)
     # save("CRO_alpha.png",fig)
