@@ -5,10 +5,8 @@ using DataFrames, CSV, Tables, Plots
 using LaTeXStrings
 using CairoMakie, StatsPlots
 using ProgressMeter, ArgParse
-using Random
-using Base.Threads
-using Dates
 using Distributed
+using Serialization
 include("aux_fun.jl")
 
 # Load network data using PowerModels
@@ -75,7 +73,7 @@ include("opt_fun.jl")
 
 # To get numerical results of normal and post-attack OPF cost in PJM 5-bus systems
 dict_pp, dict_cro=Results_CRO(net,net_c,syn_set[:s])
-@show [mean(dict_pp[:C_OPF]) mean(dict_pp[:C_att_BO]) mean(dict_cro[:C_OPF]) mean(dict_cro[:C_att_BO])]
+@show [mean(dict_pp[:C_OPF]) mean(dict_pp[:C_att_BO]) mean(dict_pp[:C_att_RO]) mean(dict_cro[:C_OPF]) mean(dict_cro[:C_att_BO])  mean(dict_cro[:C_att_RO]) ]
 
 # Get results and serialize them
 # CaseStudy_CRO(net,net_c,syn_set[:s])
