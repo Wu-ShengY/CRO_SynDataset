@@ -2,23 +2,25 @@
 
 ## Installation and usage
 
-All models are implemented in Julia Language v.1.10.5 using [JuMP](https://github.com/jump-dev/JuMP.jl) modeling language for mathematical optimization and commercial [Mosek](https://github.com/MOSEK/Mosek.jl) and [Gurobi](https://github.com/jump-dev/Gurobi.jl) optimization solvers, which need to be licensed (free for academic use). 
+All models are implemented in Julia Language v.1.10.5 using [JuMP](https://github.com/jump-dev/JuMP.jl) modeling language for mathematical optimization and commercial [Mosek](https://github.com/MOSEK/Mosek.jl) or [Gurobi](https://github.com/jump-dev/Gurobi.jl) optimization solvers, which need to be licensed (free for academic use). 
 
 The codes to implement CRO and CRO_Exp algorithms are placed in ```CRO_main.jl``` and ```CRO_EM_main.jl``` files, respectively. Make sure to active project environment using ```Project.toml``` and ```Manifest.toml``` located in the folder. 
 
-First change the directory to the CRO folder:
-
-```cd your_file_path/CRO```
 
 ### REPL environment
 
 Use the following command to setup the environments, then run the ```CRO_main.jl``` and ```CRO_EM_main.jl``` files with default arguments
 
 ```
+]
 (CRO) pkg> activate .
 (CRO) pkg> add Pkg
-(CRO) pkg> instantiate .
+(CRO) pkg> instantiate
 ```
+
+First change the directory to the CRO folder:
+
+```cd your_file_path/CRO```
 
 ### Terminal usage
 
