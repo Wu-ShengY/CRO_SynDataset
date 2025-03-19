@@ -21,7 +21,7 @@ Use the following command to setup the environments, then run the ```CRO_main.jl
 ]
 activate .
 instantiate
-add PowerModels Statistics LinearAlgebra Distributions Random JuMP Gurobi DataFrames CSV Tables Plots LaTeXStrings StatsPlots ProgressMeter ArgParse Distributed Serialization
+add PowerModels Statistics LinearAlgebra Distributions Random JuMP Gurobi DataFrames CSV Tables Plots LaTeXStrings CairoMakie StatsPlots ProgressMeter ArgParse Distributed Serialization
 ```
 
 If there are some package conflicts, use ```Pkg.resolve()``` to resolve the conflicts
