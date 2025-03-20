@@ -54,13 +54,13 @@ module load gurobi/10.0.2
 
 To run the CRO algorithm on the PJM 5-bus system, type the following command in the terminal:
 
-```julia CRO_main.jl -a 50.0 -e 1.0```
+```julia CRO_main.jl -a 50.0 -e 1.0 -s 100```
 
 which asks to compute the results for adjacency parameter 50.0MW and privacy loss 1.0. 
 
 Similarly, to run the CRO_Exp algorithm on the IEEE 14-bus system, type:
 
-```julia CRO_EM_main.jl -a 2.0 -e 1.0 -t 5```
+```julia CRO_EM_main.jl -a 2.0 -e 1.0 -t 5 -s 100```
 
 which asks to compute the results from ```τ=1``` to ```τ=5``` , with adjacency parameter 2.0MW and privacy loss 1.0. 
 
