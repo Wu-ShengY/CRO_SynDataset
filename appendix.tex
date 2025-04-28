@@ -1,0 +1,87 @@
+\documentclass{article}
+\usepackage[margin=0.7in]{geometry}
+\usepackage{amsmath}
+\usepackage{cite} 
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{tcolorbox}
+\usepackage{xcolor}
+\usepackage{engord}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{pdfpages}
+\usepackage{amssymb}
+% \usepackage{algorithmic}
+% \usepackage{algorithm}
+\usepackage{multirow}
+\usepackage{longtable}
+
+\let\oldemptyset\emptyset
+\let\emptyset\varnothing
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbg}[1]{\boldsymbol{#1}}
+\newcommand{\minimize}[1]{\underset{{#1}}{\text{minimize}}}
+\newcommand{\maximize}[1]{\underset{{#1}}{\text{maximize}}}
+\newcommand{\sminimize}[1]{\underset{{#1}}{\text{min}}}
+\newcommand{\saximize}[1]{\underset{{#1}}{\text{max}}}
+\newcommand{\st}{\text{subject to}}
+
+
+\title{\Large \bf Synthesizing Grid Data with Cyber Resilience and Privacy Guarantees \\ \vspace{0.5cm} \large Online Appendix}
+\author{Shengyang Wu, Vladimir Dvorkin}
+\date{}
+
+
+\begin{document}
+\maketitle
+\section{Reformulation of (7)}
+
+The original formulation of (7) in the manuscript are as follows
+
+\begin{subequations}\label{prob:RO}
+\begin{align}
+    C_{\text{att}}^{\text{RO}}(\mb{d})=&\;\minimize{\mb{x}}\;\; \mb{c}^{\top}\mb{x}\\
+    \st\;\;\;& \underset{\mbg{\delta_k\in\Delta}}{\max}\left[\mb{a}_{k}^{\top}\mb{x} + \mb{b}_{k}^{\top}(\mb{d}+\bm{\delta}_k) + e_{k}\right] \leqslant \mb{0},\forall k,\!\!\! \label{eq:RO st}
+\end{align}
+\end{subequations}
+
+Constraint (\ref{eq:RO st}) can be rewritten as:
+\begin{align}
+    \left[
+    \begin{array}{l}
+        \underset{\delta}{\text{max}}\quad \mb{b}_{k}^{\top}\mbg{\delta}_{k}   \\
+        \;\;\text{s.t.}\quad \underline{\mbg{\delta}} \leqslant \mbg{\delta}_{k} \leqslant \overline{\mbg{\delta}} \quad :\overline{\mbg{\mu}}_k,\underline{\mbg{\mu}}_k\\
+        \quad\quad\quad \bm{1}^{\top}\mbg{\delta}_{k}=0 \quad :\lambda_k
+    \end{array}
+    \right]
+    \leqslant -\mb{a}_{k}^{\top}\mb{x}-\mb{b}_k^{\top}\mb{d}-e_{k}\quad \forall k=1,\dots,K
+    \label{eq:Princeton_BkConstraint}
+\end{align}
+
+We can get the Lagrangian function of the left-hand side problem as 
+
+\begin{align}
+    \mathcal{L}(\overline{\mbg{\mu}}_k,\underline{\mbg{\mu}}_k,\lambda_k)&=-\mb{b}_{k}^{\top}\mbg{\delta}_{k}+\underline{\mbg{\mu}}_k^{\top}(-\mbg{\delta}_{k}+\underline{\mbg{\delta}})+\overline{\mbg{\mu}}_k^{\top}(\mbg{\delta}_{k}-\overline{\mbg{\delta}})+\lambda_k^{\top}\bm{1}^{\top}\mbg{\delta}_{k} \\ \nonumber
+    &=(-\mb{b}_{k}^{\top}-\underline{\mbg{\mu}}_k^{\top}+\overline{\mbg{\mu}}_k^{\top}+\lambda_k^{\top}\bm{1}^{\top})\mbg{\delta}_{k} +\underline{\mbg{\mu}}_k^{\top}\underline{\mbg{\delta}}-\overline{\mbg{\mu}}_k^{\top}\overline{\mbg{\delta}}
+\end{align}
+
+The dual of problem for the left-hand side maximization problem (\ref{eq:Princeton_BkConstraint}) can be expressed as:
+
+\begin{align}
+    \underset{\overline{\mbg{\mu}}_k,\underline{\mbg{\mu}}_k,\lambda_k}{\text{maximize}}\quad& \underline{\mbg{\mu}}_k^{\top}\underline{\mbg{\delta}}-\overline{\mbg{\mu}}_k^{\top}\overline{\mbg{\delta}} \label{eq:Printon_Dual} \\ \nonumber
+    \text{subject to} \quad& -\mb{b}_{k}-\underline{\mbg{\mu}}_k+\overline{\mbg{\mu}}_k+\bm{1}\cdot\lambda_k=0 \\ \nonumber
+    \quad& \underline{\mbg{\mu}}_k,\overline{\mbg{\mu}}_k \geqslant 0,\;\lambda_k \in \text{FREE} 
+\end{align} 
+Take (\ref{eq:Printon_Dual}) into (\ref{eq:Princeton_BkConstraint}), the whole formulation can be written as:
+\begin{subequations}
+\begin{align}
+    \underset{\mb{x},\overline{\mbg{\mu}},\underline{\mbg{\mu}},\lambda}{\text{minimize}}\quad& \mb{c}^{\top}\mb{x}\\
+    \text{subject to}\quad& \overline{\mbg{\mu}}_k^{\top}\overline{\mbg{\delta}}-\underline{\mbg{\mu}}_k^{\top}\underline{\mbg{\delta}} \leqslant-\mb{a}_{k}^{\top}\mb{x}-\mb{b}_k^{\top}\mb{d}-e_{k} \quad \forall k=1,\dots,K\\
+    \quad&\mb{b}_{k}-\overline{\mbg{\mu}}_k+\underline{\mbg{\mu}}_k-\bm{1}\cdot\lambda_k=\bm{0}\quad \forall k=1,\dots,K\\
+    \quad& \underline{\mbg{\mu}}_k,\overline{\mbg{\mu}}_k \geqslant 0,\;\lambda_k \in \text{FREE}\\
+\end{align}
+\label{eq:Princeton_BkDelta}
+\end{subequations}
+which is the formulation (8) in the manuscript.
+
+\end{document}
