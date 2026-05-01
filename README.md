@@ -65,3 +65,7 @@ Similarly, to run the CRO_Exp algorithm on the IEEE 14-bus system, type:
 which asks to compute the results from ```τ=1``` to ```τ=5``` , with adjacency parameter 2.0MW and privacy loss 1.0. 
 
 ---
+
+### Citation
+
+Wu, Shengyang, and Vladimir Dvorkin. ["Synthesizing Grid Data With Cyber Resilience and Privacy Guarantees."](https://ieeexplore.ieee.org/abstract/document/11016094?casa_token=PQ_hT4tuofcAAAAA:CAAEbsv5Fm3c6YfwvJYcFYJFXuze0VFLeKyfC83npQMr0f_15mc91p-MtH-2zTff6ZKxJBtxur4) IEEE Control Systems Letters (2025).
